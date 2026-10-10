@@ -1,11 +1,11 @@
 {
   "domain": "spx",
   "name": "Smart Pyramids",
-  "version": "0.2.0",
-  "documentation": "https://github.com/Smart-Pyramids-R-D/spx-ha-integration",
-  "issue_tracker": "https://github.com/Smart-Pyramids-R-D/spx-ha-integration/issues",
   "codeowners": ["@YOUR_GITHUB_USERNAME"],
   "config_flow": true,
+  "documentation": "https://github.com/Smart-Pyramids-R-D/spx-ha-integration",
   "iot_class": "cloud_push",
-  "requirements": ["paho-mqtt==2.1.0"]
+  "issue_tracker": "https://github.com/Smart-Pyramids-R-D/spx-ha-integration/issues",
+  "requirements": ["paho-mqtt>=2.1.0"],
+  "version": "0.2.0"
 }
