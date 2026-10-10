@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to SPX",
+        "data": {"username": "Username", "password": "Password"}
+      },
+      "reauth_confirm": {
+        "title": "Sign in to SPX again",
+        "data": {"username": "Username", "password": "Password"}
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid SPX credentials or an unsupported sign-in challenge",
+      "cognito_unreachable": "Could not reach Cognito",
+      "device_api_error": "Could not retrieve SPX devices",
+      "mqtt_token_error": "Could not obtain SPX MQTT credentials",
+      "wrong_account": "Sign in with the same SPX account"
+    },
+    "abort": {"reauth_successful": "SPX account reauthenticated"}
+  }
+}
