@@ -3,26 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
-from .api import SPXApi, SPXDevice
+from .api import SPXApi, SPXAuthError, SPXDevice
 from .mqtt import SPXMqtt, command, parse_state, parse_status
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
 
 
 class SPXCoordinator:
     """Keep cloud metadata separate from the MQTT transport."""
 
-    def __init__(self, hass: HomeAssistant, api: SPXApi, key: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, api: SPXApi, key: str
+    ) -> None:
         self.hass = hass
+        self.entry = entry
         self.api = api
         self.key = key
         self.devices: dict[str, SPXDevice] = {}
         self.relay_states: dict[tuple[str, int], bool] = {}
         self.online: dict[str, bool] = {}
         self._topic_devices: dict[str, str] = {}
-        self._mqtt = SPXMqtt(api, self._topics, self._message, self._connection)
+        self._mqtt = SPXMqtt(
+            hass, entry, api, self._topics, self._message, self._connection
+        )
         self._refresh_task: asyncio.Task[None] | None = None
         self._broker_connected = False
 
@@ -75,6 +84,9 @@ class SPXCoordinator:
             await asyncio.sleep(300)
             try:
                 await self.refresh_devices()
+            except SPXAuthError:
+                self.entry.async_start_reauth(self.hass)
+                return
             except Exception as exc:
                 log.warning("SPX device refresh failed: %s", type(exc).__name__)
 

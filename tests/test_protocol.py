@@ -6,9 +6,10 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest.mock import AsyncMock, patch
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "custom_components" / "spx"
 package = types.ModuleType("spx_protocol_test")
 package.__path__ = [str(ROOT)]
 sys.modules[package.__name__] = package
@@ -114,7 +115,10 @@ class ProtocolTests(unittest.TestCase):
 
     def test_mqtt_disconnect_marks_unavailable(self):
         changes = []
-        transport = mqtt.SPXMqtt(None, lambda: {"devices/kitchen/r1/state"}, lambda *args: None, changes.append)
+        transport = mqtt.SPXMqtt(
+            object(), object(), None,
+            lambda: {"devices/kitchen/r1/state"}, lambda *args: None, changes.append,
+        )
 
         class Client:
             def subscribe(self, topic, qos):
@@ -130,7 +134,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(changes, [True, False])
 
     def test_reported_state_and_offline(self):
-        account = coordinator.SPXCoordinator(object(), None, "key")
+        account = coordinator.SPXCoordinator(object(), object(), None, "key")
         account.devices = {"device119": api.SPXDevice("device119", "Kitchen", "kitchen", 2)}
         account._topic_devices = {"kitchen": "device119"}
         account._connection(True)
@@ -145,7 +149,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertNotIn(("device119", 1), account.relay_states)
 
     def test_four_relays_share_one_device(self):
-        account = coordinator.SPXCoordinator(object(), None, "key")
+        account = coordinator.SPXCoordinator(object(), object(), None, "key")
         account.devices = {"device119": api.SPXDevice("device119", "Kitchen", "kitchen", 4)}
         entities = [switch.SPXRelaySwitch(account, "device119", relay) for relay in range(1, 5)]
         self.assertEqual([item._attr_unique_id for item in entities], [f"device119_r{i}" for i in range(1, 5)])
@@ -153,8 +157,59 @@ class ProtocolTests(unittest.TestCase):
 
 
 class ApiFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_periodic_refresh_starts_reauth_and_stops_on_auth_error(self):
+        hass = object()
+
+        class Entry:
+            def __init__(self):
+                self.reauth_calls = []
+
+            def async_start_reauth(self, reauth_hass):
+                self.reauth_calls.append(reauth_hass)
+
+        class Api:
+            async def devices(self):
+                raise api.SPXAuthError("refresh token revoked")
+
+        entry = Entry()
+        account = coordinator.SPXCoordinator(hass, entry, Api(), "key")
+
+        with patch.object(coordinator.asyncio, "sleep", new=AsyncMock()):
+            await account._periodic_refresh()
+
+        self.assertEqual(entry.reauth_calls, [hass])
+
+    async def test_mqtt_starts_reauth_and_stops_on_auth_error(self):
+        hass = object()
+
+        class Entry:
+            def __init__(self):
+                self.reauth_calls = []
+
+            def async_start_reauth(self, reauth_hass):
+                self.reauth_calls.append(reauth_hass)
+
+        class Api:
+            def __init__(self):
+                self.policy_calls = 0
+
+            async def mqtt_policy(self, force):
+                self.policy_calls += 1
+                raise api.SPXAuthError("refresh token revoked")
+
+        entry = Entry()
+        client = Api()
+        transport = mqtt.SPXMqtt(
+            hass, entry, client, lambda: set(), lambda *args: None, lambda connected: None
+        )
+
+        await transport._run()
+
+        self.assertEqual(entry.reauth_calls, [hass])
+        self.assertEqual(client.policy_calls, 1)
+
     async def test_online_relay_can_command_without_initial_state(self):
-        account = coordinator.SPXCoordinator(object(), None, "key")
+        account = coordinator.SPXCoordinator(object(), object(), None, "key")
         account.devices = {"device119": api.SPXDevice("device119", "Kitchen", "kitchen", 2)}
         account._connection(True)
         account.online["device119"] = True

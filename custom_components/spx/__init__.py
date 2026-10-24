@@ -18,7 +18,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not refresh_token:
         raise ConfigEntryAuthFailed("SPX account sign in is required")
     api = SPXApi(async_get_clientsession(hass), refresh_token)
-    coordinator = SPXCoordinator(hass, api, f"spx_{entry.entry_id}")
+    coordinator = SPXCoordinator(hass, entry, api, f"spx_{entry.entry_id}")
     try:
         await coordinator.start()
     except SPXAuthError as exc:

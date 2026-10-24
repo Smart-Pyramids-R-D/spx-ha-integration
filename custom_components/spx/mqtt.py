@@ -9,11 +9,16 @@ from pathlib import Path
 import random
 import ssl
 import time
+from typing import TYPE_CHECKING
 
 import paho.mqtt.client as mqtt
 
 from .api import SPXApi, SPXApiError, SPXAuthError
 from .const import MQTT_HOST, MQTT_PORT
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,9 +71,12 @@ class SPXMqtt:
     """One account's broker connection with token renewal and reconnect."""
 
     def __init__(
-        self, api: SPXApi, topics: Callable[[], set[str]],
+        self, hass: HomeAssistant, entry: ConfigEntry,
+        api: SPXApi, topics: Callable[[], set[str]],
         on_message: Callable[[str, str], None], on_connection: Callable[[bool], None],
     ) -> None:
+        self.hass = hass
+        self.entry = entry
         self.api = api
         self._topics = topics
         self._on_message = on_message
@@ -176,7 +184,11 @@ class SPXMqtt:
                         pass
                 else:
                     await self._disconnected.wait()
-            except (OSError, TimeoutError, RuntimeError, SPXApiError, SPXAuthError) as exc:
+            except SPXAuthError:
+                _LOGGER.warning("SPX MQTT authentication failed; sign-in required")
+                self.entry.async_start_reauth(self.hass)
+                return
+            except (OSError, TimeoutError, RuntimeError, SPXApiError) as exc:
                 _LOGGER.warning("SPX MQTT connection failed (%s); retrying", type(exc).__name__)
             finally:
                 self._connected.clear()
